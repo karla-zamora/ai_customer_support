@@ -1,15 +1,9 @@
 'use client'
 
-import { useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Box, Stack, TextField, Button } from '@mui/material'
 
 export default function Home() {
-
-  const prompt = "Print a random sentence"
-  //state variable for the user prompt
-  const [input, setInput] = useState('Print hello in french!')
-  //state variable for the ai response output
-  const [output, setOutput] = useState('This is not a quote')
 
   //messages = user and ai responses to be displayed in bubble chats
   const [messages, setMessages] = useState([
@@ -20,41 +14,66 @@ export default function Home() {
   ])
 
   //message = text field value
-  const [message, setMessage] = useState('') 
-  
+  const [message, setMessage] = useState('')
+  //to disable send button while loading
+  const [isLoading, setIsLoading] = useState(false)
+  //to scroll down for every new message
+  const messagesEndRef = useRef(null)
+
   const sendMessage = async () => {
-    setMessage('')  // Clear the input field
+    if (!message.trim() || isLoading) return; // Empty message check
+    setMessage('')  // Clear text field
+    setIsLoading(true)
     setMessages((messages) => [
       ...messages,
       { role: 'user', content: message },  // Add the user's message to the chat
     ])
 
     //function to send prompt to model
-      try {
-        const response = await fetch('/api/generate', {
-          method: 'POST',
-          headers: {
-            'Content-type': 'application/json'
-          },
-          body: JSON.stringify({ body: message })
-        })
+    try {
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: {
+          'Content-type': 'application/json'
+        },
+        body: JSON.stringify({ body: message })
+      })
 
-        const data = await response.json()
-        if (response.ok) {
-          setMessages((messages) => [
-            ...messages, 
-            { role: 'assistant', content: data.output },  
-          ])
-        } else {
-          setMessages(data.error)
-        }
-
-      } catch (error) {
-        console.log("Post request error: %s", error)
+      const data = await response.json()
+      if (response.ok) {
+        setMessages((messages) => [
+          ...messages,
+          { role: 'assistant', content: data.output },
+        ])
+      } else {
+        setMessages(data.error)
       }
+
+    } catch (error) {
+      console.log("Post request error: %s", error)
+      setMessages((messages) => [
+        ...messages,
+        { role: 'assistant', content: "I'm sorry, but I encountered an error. Please try again later." },
+      ])
+    }
+    //response was received
+    setIsLoading(false)
   }
 
+  const handleKeyPress = (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault()
+      sendMessage()
+    }
+  }
 
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }
+  //scroll to bottom of each new message
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages])
 
   return (
     <Box
@@ -102,6 +121,7 @@ export default function Home() {
               </Box>
             </Box>
           ))}
+          <div id="end-of-msg" ref={messagesEndRef} />
         </Stack>
         <Stack direction={'row'} spacing={2}>
           <TextField
@@ -109,9 +129,14 @@ export default function Home() {
             fullWidth
             value={message}
             onChange={(e) => setMessage(e.target.value)}
+            onKeyDown={handleKeyPress}
+            disabled={isLoading}
           />
-          <Button variant="contained" onClick={sendMessage}>
-            Send
+          <Button variant="contained"
+            onClick={sendMessage} 
+            disabled={isLoading}
+          >
+            {isLoading ? 'Sending...' : 'Send'}
           </Button>
         </Stack>
       </Stack>
